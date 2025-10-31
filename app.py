@@ -1,54 +1,62 @@
 import streamlit as st
-import openai
-import os
+import nltk
+from nltk.corpus import wordnet
+from nltk.tokenize import word_tokenize
+import random
 
-# Set your OpenAI API key here (or use environment variables for security)
-# NEVER hardcode your key in production; use Streamlit secrets or env vars.
-openai.api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+# Download NLTK data (run once)
+nltk.download('punkt')
+nltk.download('wordnet')
 
-if not openai.api_key:
-    st.error("Please set your OpenAI API key in Streamlit secrets or environment variables. Get one at openai.com.")
+def get_synonyms(word):
+    """Get a list of synonyms for a word using WordNet."""
+    synonyms = set()
+    for syn in wordnet.synsets(word):
+        for lemma in syn.lemmas():
+            synonyms.add(lemma.name())
+    return list(synonyms)
 
-def rewrite_text_with_gpt(text, strength="moderate"):
+def paraphrase_text(text):
     """
-    Rewrites text using OpenAI's GPT model to make it sound more human-like.
-    Strength: 'light' (minor changes), 'moderate' (balanced), 'heavy' (significant rewrite).
+    Basic paraphrasing by replacing words with random synonyms.
+    This is simplistic and may not produce coherent results for complex text.
     """
-    prompts = {
-        "light": f"Rewrite the following text with minor changes to make it sound more natural, keeping the original meaning: {text}",
-        "moderate": f"Paraphrase the following text in a human-like way, preserving the core ideas but varying the wording: {text}",
-        "heavy": f"Completely rewrite the following text as if a human wrote it originally, changing structure and words while keeping the meaning intact: {text}"
-    }
-    
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Use gpt-4 for better results if available
-            messages=[{"role": "user", "content": prompts[strength]}],
-            max_tokens=1000,  # Adjust based on text length
-            temperature=0.7  # Controls creativity; lower for more consistent output
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Error rewriting text: {str(e)}. Check your API key and quota."
+    tokens = word_tokenize(text)
+    paraphrased = []
+    for token in tokens:
+        if token.isalpha() and random.random() > 0.7:  # 30% chance to replace
+            synonyms = get_synonyms(token.lower())
+            if synonyms:
+                replacement = random.choice(synonyms)
+                # Preserve case
+                if token.isupper():
+                    replacement = replacement.upper()
+                elif token.istitle():
+                    replacement = replacement.capitalize()
+                paraphrased.append(replacement)
+            else:
+                paraphrased.append(token)
+        else:
+            paraphrased.append(token)
+    return ' '.join(paraphrased)
 
-st.title("Advanced Text Rewriter (Human-Like Paraphrasing)")
+st.title("Text Paraphraser (Reduce AI/Plagiarism Detection)")
 st.write("""
-This app uses OpenAI's GPT to rewrite text in a more human-like style.
-**Disclaimer:** No tool guarantees 100% undetectability. Use for educational purposes only. Ethical use is crucial – don't use for fraud or plagiarism.
+This app paraphrases input text using synonym replacement to help make it more original.
+**Disclaimer:** This is a basic tool for educational purposes. It may not produce high-quality results and won't reliably bypass advanced detectors. Use ethically!
 """)
 
 # Text input
-input_text = st.text_area("Input Text", height=200, placeholder="Paste your text here to rewrite...")
+input_text = st.text_area("Input Text", height=200, placeholder="Paste your text here to paraphrase...")
 
-# Rewrite strength
-strength = st.selectbox("Rewrite Strength", ["light", "moderate", "heavy"], index=1)
+# Slider for paraphrase intensity (not used in this simple version, but can be extended)
+intensity = st.slider("Paraphrase Intensity (higher = more changes)", 0.1, 1.0, 0.3)
 
-if st.button("Rewrite Text"):
+if st.button("Paraphrase Text"):
     if input_text.strip():
-        with st.spinner("Rewriting..."):
-            output_text = rewrite_text_with_gpt(input_text, strength)
-        st.subheader("Rewritten Text:")
+        output_text = paraphrase_text(input_text)
+        st.subheader("Paraphrased Text:")
         st.text_area("Output", value=output_text, height=200, disabled=True)
-        st.info("Tip: Review and edit for accuracy. This isn't perfect – human writing involves personal style.")
+        st.info("Tip: Review and edit the output for coherence. For better results, use AI APIs like GPT-3 with proper prompts.")
     else:
-        st.warning("Please enter some text to rewrite.")
+        st.warning("Please enter some text to paraphrase.")
